@@ -44,7 +44,7 @@ def generate_code(prompt):
         code += chunk.text
     return code
 
-st.set_page_config(page_title='Design Bot', layout="centered")
+st.set_page_config(page_title='Design Bot Generator', layout="centered")
 
 st.markdown("""
     <style>
