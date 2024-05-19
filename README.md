@@ -17,5 +17,8 @@ It uses Stability AI for image generation and Google's Gemini language model for
    streamlit run app.py
    ```
 
+Check out the deployed application! 
+https://design-bot-generator-fygyp6tuwezqzwu9odqbej.streamlit.app/
+
 
 
