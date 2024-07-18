@@ -204,6 +204,86 @@ def main(swagger_file: str):
 if __name__ == "__main__":
     main("path/to/your/swagger.yaml")
 
+    
 
+import yaml
+from typing import Dict, List, Any
+
+# ... (previous code remains the same)
+
+def generate_java_test_class(api_details: List[Dict[str, Any]], class_name: str) -> str:
+    imports = set([
+        "au.com.dius.pact.consumer.MockServer",
+        "au.com.dius.pact.consumer.dsl.PactDslWithProvider",
+        "au.com.dius.pact.consumer.junit5.PactConsumerTestExt",
+        "au.com.dius.pact.consumer.junit5.PactTestFor",
+        "au.com.dius.pact.core.model.RequestResponsePact",
+        "au.com.dius.pact.core.model.annotations.Pact",
+        "org.junit.jupiter.api.Test",
+        "org.junit.jupiter.api.extension.ExtendWith",
+        "org.springframework.http.HttpEntity",
+        "org.springframework.http.HttpHeaders",
+        "org.springframework.http.HttpMethod",
+        "org.springframework.http.ResponseEntity",
+        "org.springframework.web.client.RestTemplate",
+        "org.springframework.web.client.HttpClientErrorException",
+        "org.springframework.web.client.HttpServerErrorException",
+        "java.util.HashMap",
+        "java.util.Map",
+        "org.junit.jupiter.api.Assertions",
+        "com.fasterxml.jackson.databind.ObjectMapper"
+    ])
+
+    java_code = f"""
+{generate_import_statements(imports)}
+
+@ExtendWith(PactConsumerTestExt.class)
+@PactTestFor(providerName = "{{{{PROVIDER_NAME}}}}")
+public class {class_name} {{
+
+    private static final String CONSUMER_NAME = "{{{{CONSUMER_NAME}}}}";
+    private static final ObjectMapper objectMapper = new ObjectMapper();
+
+    """
+
+    for api in api_details:
+        method_name = api['operation_id'].replace('-', '_')
+        java_code += generate_pact_method(api, method_name)
+        java_code += generate_test_method(api, method_name)
+
+    java_code += "}\n"
+    return java_code
+
+def generate_import_statements(imports: set) -> str:
+    return "\n".join(f"import {imp};" for imp in sorted(imports))
+
+# ... (rest of the code remains the same)
+
+def generate_test_method(api: Dict[str, Any], method_name: str) -> str:
+    return f"""
+    @Test
+    @PactTestFor(pactMethod = "pactFor{method_name.capitalize()}")
+    void test{method_name.capitalize()}(MockServer mockServer) {{
+        RestTemplate restTemplate = new RestTemplate();
+        String url = mockServer.getUrl() + "{api['path']}";
+        {generate_path_params(api)}
+        {generate_query_params_url(api)}
+
+        HttpHeaders headers = new HttpHeaders();
+        {generate_headers_test(api)}
+
+        {generate_request_body_test(api)}
+
+        try {{
+            ResponseEntity<String> response = restTemplate.exchange(url, HttpMethod.{api['method']}, requestEntity, String.class);
+            Assertions.assertEquals({next(iter(api['responses']))}, response.getStatusCodeValue());
+            // Add more assertions here based on the expected response
+        }} catch (HttpClientErrorException | HttpServerErrorException e) {{
+            Assertions.fail("Unexpected error: " + e.getMessage());
+        }}
+    }}
+    """
+
+# ... (rest of the code remains the same)
 
  
