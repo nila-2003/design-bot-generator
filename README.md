@@ -137,3 +137,111 @@ def generate_test_method(api: Dict[str, Any], method_name: str) -> str:
 # ... (rest of the code remains the same)
 
  
+import yaml
+from typing import Dict, List, Any
+
+def parse_swagger(file_path: str) -> Dict[str, Any]:
+    with open(file_path, 'r') as file:
+        return yaml.safe_load(file)
+
+def extract_api_details(swagger_data: Dict[str, Any]) -> List[Dict[str, Any]]:
+    api_details = []
+    for path, path_item in swagger_data['paths'].items():
+        for method, operation in path_item.items():
+            api_details.append({
+                'path': path,
+                'method': method.upper(),
+                'operation_id': operation.get('operationId', f"{method}_{path.replace('/', '_')}"),
+                'summary': operation.get('summary', ''),
+                'description': operation.get('description', ''),
+                'parameters': operation.get('parameters', []),
+                'responses': operation.get('responses', {})
+            })
+    return api_details
+
+def generate_java_test_class(api_details: List[Dict[str, Any]], class_name: str) -> str:
+    java_code = f"""
+public class {class_name} {{
+
+    private static final String PROVIDER_NAME = "YourProviderName";
+    private static final String CONSUMER_NAME = "YourConsumerName";
+
+    """
+
+    for api in api_details:
+        java_code += generate_pact_method(api)
+        java_code += generate_test_method(api)
+
+    java_code += "}\n"
+    return java_code
+
+def generate_pact_method(api: Dict[str, Any]) -> str:
+    method_name = api['operation_id'].replace('-', '_')
+    return f"""
+    @Pact(provider = PROVIDER_NAME, consumer = CONSUMER_NAME)
+    public RequestResponsePact pactFor{method_name.capitalize()}(PactDslWithProvider builder) {{
+        return builder
+            .given("{api['summary']}")
+            .uponReceiving("{api['description']}")
+            .path("{api['path']}")
+            .method("{api['method']}")
+            {generate_headers(api)}
+            {generate_query_params(api)}
+            {generate_request_body(api)}
+            .willRespondWith()
+            .status({next(iter(api['responses']))})
+            {generate_response_body(api)}
+            .toPact();
+    }}
+    """
+
+def generate_test_method(api: Dict[str, Any]) -> str:
+    method_name = api['operation_id'].replace('-', '_')
+    return f"""
+    @Test
+    @PactTestFor(pactMethod = "pactFor{method_name.capitalize()}")
+    void test{method_name.capitalize()}(MockServer mockServer) {{
+        // Implement your test logic here
+        // Example:
+        // RestTemplate restTemplate = new RestTemplate();
+        // String url = mockServer.getUrl() + "{api['path']}";
+        // ResponseEntity<String> response = restTemplate.exchange(url, HttpMethod.{api['method']}, null, String.class);
+        // assertEquals({next(iter(api['responses']))}, response.getStatusCodeValue());
+    }}
+    """
+
+def generate_headers(api: Dict[str, Any]) -> str:
+    headers = [param for param in api['parameters'] if param['in'] == 'header']
+    if headers:
+        return ".headers(" + ", ".join(f'"{h["name"]}", "{h["name"]}_value"' for h in headers) + ")"
+    return ""
+
+def generate_query_params(api: Dict[str, Any]) -> str:
+    params = [param for param in api['parameters'] if param['in'] == 'query']
+    if params:
+        return '.query("' + "&".join(f"{p['name']}={{{p['name']}}}" for p in params) + '")'
+    return ""
+
+def generate_request_body(api: Dict[str, Any]) -> str:
+    # This is a simplified version. You might need to adjust based on your specific Swagger structure
+    return ".body(PactDslJsonBody.newJsonBody().build())"
+
+def generate_response_body(api: Dict[str, Any]) -> str:
+    # This is a simplified version. You might need to adjust based on your specific Swagger structure
+    return ".body(PactDslJsonBody.newJsonBody().build())"
+
+def main(swagger_file: str):
+    swagger_data = parse_swagger(swagger_file)
+    api_details = extract_api_details(swagger_data)
+    
+    class_name = swagger_data.get('info', {}).get('title', 'API').replace(' ', '') + 'ContractTest'
+    java_code = generate_java_test_class(api_details, class_name)
+    
+    # Write the generated Java code to a file
+    with open(f"{class_name}.java", "w") as file:
+        file.write(java_code)
+    
+    print(f"Generated Java test class: {class_name}.java")
+
+if __name__ == "__main__":
+    main("path/to/your/swagger.yaml")
